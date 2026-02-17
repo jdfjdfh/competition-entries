@@ -19,22 +19,57 @@ class SubmissionController extends Controller
         $this->submissionService = $submissionService;
     }
 
-    public function index()
+    /**
+     * Показать список работ
+     */
+    public function index(Request $request)
     {
-        $submissions = $this->submissionService->getSubmissionsForUser(auth()->user());
+        $user = auth()->user();
+        $query = Submission::with(['user', 'contest', 'attachments']);
+
+        // Фильтрация по роли
+        if ($user->isParticipant()) {
+            $query->where('user_id', $user->id);
+        }
+
+        // Поиск
+        if ($request->has('search') && !empty($request->search)) {
+            $query->where('title', 'like', '%' . $request->search . '%');
+        }
+
+        // Фильтр по статусу
+        if ($request->has('status') && !empty($request->status)) {
+            $query->where('status', $request->status);
+        }
+
+        // Фильтр по конкурсу (для жюри и админов)
+        if (($user->isJury() || $user->isAdmin()) && $request->has('contest_id') && !empty($request->contest_id)) {
+            $query->where('contest_id', $request->contest_id);
+        }
+
+        // Сортировка
+        $query->latest();
+
+        // Пагинация
+        $submissions = $query->paginate(15)->withQueryString();
+
         return view('submissions.index', compact('submissions'));
     }
 
+    /**
+     * Показать форму создания работы
+     */
     public function create(Request $request)
     {
         $contestId = $request->get('contest_id');
         $contest = Contest::findOrFail($contestId);
 
-        $this->authorize('create', [Submission::class, $contest]);
-
         return view('submissions.create', compact('contest'));
     }
 
+    /**
+     * Сохранить новую работу
+     */
     public function store(StoreSubmissionRequest $request)
     {
         $submission = $this->submissionService->create(
@@ -47,21 +82,27 @@ class SubmissionController extends Controller
             ->with('success', 'Черновик работы успешно создан');
     }
 
+    /**
+     * Показать конкретную работу
+     */
     public function show(Submission $submission)
     {
-        $submission = $this->submissionService->findSubmissionForUser(
-            auth()->user(),
-            $submission->id
-        );
+        $submission->load(['user', 'contest', 'attachments', 'comments.user']);
 
         return view('submissions.show', compact('submission'));
     }
 
+    /**
+     * Показать форму редактирования
+     */
     public function edit(Submission $submission)
     {
         return view('submissions.edit', compact('submission'));
     }
 
+    /**
+     * Обновить работу
+     */
     public function update(UpdateSubmissionRequest $request, Submission $submission)
     {
         $submission = $this->submissionService->update(
@@ -74,8 +115,13 @@ class SubmissionController extends Controller
             ->with('success', 'Работа успешно обновлена');
     }
 
+    /**
+     * Отправить работу на проверку
+     */
     public function submit(Submission $submission)
     {
+        $this->authorize('submit', $submission);
+
         try {
             $submission = $this->submissionService->submit($submission);
 
@@ -89,6 +135,9 @@ class SubmissionController extends Controller
         }
     }
 
+    /**
+     * Изменить статус работы (для жюри)
+     */
     public function changeStatus(ChangeSubmissionStatusRequest $request, Submission $submission)
     {
         try {

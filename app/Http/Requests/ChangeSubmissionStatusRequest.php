@@ -3,26 +3,37 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use App\Models\Submission;
 
 class ChangeSubmissionStatusRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
-    public function authorize(): bool
+    public function authorize()
     {
-        return false;
+        return $this->user() && $this->user()->isJury();
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
-    public function rules(): array
+    public function rules()
+    {
+        $allowedTransitions = [
+            Submission::STATUS_SUBMITTED => [Submission::STATUS_NEEDS_FIX, Submission::STATUS_ACCEPTED, Submission::STATUS_REJECTED],
+            Submission::STATUS_NEEDS_FIX => [Submission::STATUS_SUBMITTED, Submission::STATUS_REJECTED],
+        ];
+
+        $submission = $this->route('submission');
+        $currentStatus = $submission->status;
+
+        $allowedNextStatuses = $allowedTransitions[$currentStatus] ?? [];
+
+        return [
+            'status' => 'required|in:' . implode(',', $allowedNextStatuses),
+            'comment' => 'required_if:status,' . Submission::STATUS_NEEDS_FIX . '|nullable|string',
+        ];
+    }
+
+    public function messages()
     {
         return [
-            //
+            'comment.required_if' => 'Комментарий обязателен при запросе доработки',
         ];
     }
 }

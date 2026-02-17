@@ -76,4 +76,30 @@ class User extends Authenticatable
     {
         return $this->role === 'participant';
     }
+
+    /**
+     * Получить название роли на русском
+     */
+    public function getRoleNameAttribute()
+    {
+        return match($this->role) {
+            'admin' => 'Администратор',
+            'jury' => 'Жюри',
+            'participant' => 'Участник',
+            default => $this->role,
+        };
+    }
+
+    /**
+     * Получить цветовой класс для роли
+     */
+    public function getRoleColorClassAttribute()
+    {
+        return match($this->role) {
+            'admin' => 'bg-red-100 text-red-800',
+            'jury' => 'bg-purple-100 text-purple-800',
+            'participant' => 'bg-green-100 text-green-800',
+            default => 'bg-gray-100 text-gray-800',
+        };
+    }
 }
