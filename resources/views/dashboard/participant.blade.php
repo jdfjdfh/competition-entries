@@ -170,19 +170,43 @@
                 @forelse($active_contests as $contest)
                     <div class="px-4 py-4 sm:px-6 border-b border-gray-200 hover:bg-gray-50">
                         <div class="flex items-center justify-between">
-                            <div>
+                            <div class="flex-1">
                                 <a href="{{ route('contests.show', $contest) }}" class="text-sm font-medium text-indigo-600 hover:text-indigo-900">
                                     {{ $contest->title }}
                                 </a>
-                                <p class="text-xs text-gray-500 mt-1">
-                                    Дедлайн: {{ $contest->deadline_at->format('d.m.Y H:i') }}
-                                </p>
+                                <div class="mt-1 flex items-center space-x-2">
+                        <span class="text-xs {{ $contest->deadline_color }}">
+                            {{ $contest->deadline_icon }} {{ $contest->formatted_deadline }}
+                        </span>
+                                    <span class="text-xs text-gray-400">•</span>
+                                    <span class="text-xs text-gray-500">
+                            до {{ $contest->exact_deadline }}
+                        </span>
+                                </div>
                             </div>
 
                             <div class="flex items-center space-x-3">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            {{ $contest->deadline_at->diffInDays(now()) }} дней
+                                @php
+                                    $diffInDays = now()->diffInDays($contest->deadline_at, false);
+                                @endphp
+
+                                @if($diffInDays <= 1)
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Срочно!
                         </span>
+                                @elseif($diffInDays <= 3)
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                            Скоро
+                        </span>
+                                @elseif($diffInDays <= 7)
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            {{ $diffInDays }} дней
+                        </span>
+                                @else
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            {{ floor($diffInDays / 7) }} {{ $contest->pluralForm(floor($diffInDays / 7), ['неделя', 'недели', 'недель']) }}
+                        </span>
+                                @endif
 
                                 <a href="{{ route('submissions.create', ['contest_id' => $contest->id]) }}"
                                    class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium py-1 px-3 rounded">
