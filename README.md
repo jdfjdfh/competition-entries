@@ -17,4 +17,5 @@ AWS_USE_PATH_STYLE_ENDPOINT=true</br>
 Дальше: php artisan migrate --force --seed и ждемс.</br>
 Очищаем конфиг и кэш: php artisan config:clear ; php artisan cache:clear</br>
 и после этого всего можно запускать php artisan serve</br>
-Далее мы запускаем второе окно терминала OSPanel, чтобы запустить очередь, также сначала "cd путь", после php artisan queue:work.
+Далее мы запускаем второе окно терминала OSPanel, чтобы запустить очередь, также сначала "cd путь", после php artisan queue:work.</br>
+Все тестовые юзеры расположены внизу на странице login
