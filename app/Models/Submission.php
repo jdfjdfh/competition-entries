@@ -97,4 +97,43 @@ class Submission extends Model
             default => 'bg-gray-100 text-gray-800',
         };
     }
+
+    /**
+     * Получить допустимые следующие статусы для текущего статуса
+     */
+    public function getAllowedNextStatuses(): array
+    {
+        $transitions = [
+            'draft' => ['submitted'], // Черновик можно только отправить
+            'submitted' => ['needs_fix', 'accepted', 'rejected'], // На проверке - три варианта
+            'needs_fix' => ['submitted', 'rejected'], // На доработке - можно отправить или отклонить
+            'accepted' => [], // Принято - ничего нельзя менять
+            'rejected' => [], // Отклонено - ничего нельзя менять
+        ];
+
+        return $transitions[$this->status] ?? [];
+    }
+
+    /**
+     * Проверить, может ли жюри установить указанный статус
+     */
+    public function canJurySetStatus(string $newStatus): bool
+    {
+        return in_array($newStatus, $this->getAllowedNextStatuses());
+    }
+
+    /**
+     * Получить человекочитаемое название статуса
+     */
+    public function getStatusDisplayName(): string
+    {
+        return match($this->status) {
+            'draft' => 'Черновик',
+            'submitted' => 'На проверке',
+            'needs_fix' => 'Требует доработки',
+            'accepted' => 'Принято',
+            'rejected' => 'Отклонено',
+            default => $this->status,
+        };
+    }
 }

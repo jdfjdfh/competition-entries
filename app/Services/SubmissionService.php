@@ -65,24 +65,19 @@ class SubmissionService
         });
     }
 
-    public function changeStatus(Submission $submission, string $newStatus, ?string $comment = null)
+    public function changeStatus(Submission $submission, string $newStatus, ?User $jury = null): Submission
     {
-        $oldStatus = $submission->status;
-
-        // Проверяем допустимость перехода
-        if (!$this->isValidTransition($oldStatus, $newStatus)) {
-            throw new \Exception('Invalid status transition');
+        // Проверяем, допустим ли такой переход
+        if (!$submission->canJurySetStatus($newStatus)) {
+            throw new \Exception('Недопустимый переход статуса');
         }
 
-        return DB::transaction(function () use ($submission, $newStatus, $oldStatus, $comment) {
+        return DB::transaction(function () use ($submission, $newStatus, $jury) {
+            $oldStatus = $submission->status;
+
             $submission->update(['status' => $newStatus]);
 
-            // Если статус needs_fix и есть комментарий, добавляем его
-            if ($newStatus === Submission::STATUS_NEEDS_FIX && $comment) {
-                $this->addComment($submission, $comment, auth()->user());
-            }
-
-            // Запускаем уведомление
+            // Отправляем уведомление
             NotifyStatusChangedJob::dispatch($submission, $oldStatus);
 
             return $submission;

@@ -40,7 +40,7 @@ class AuthController extends Controller
             $user = Auth::user();
 
             if ($user->isAdmin()) {
-                return redirect()->intended(route('admin.users.index'))
+                return redirect()->intended(route('admin.users'))
                     ->with('success', 'Добро пожаловать, администратор!');
             }
 

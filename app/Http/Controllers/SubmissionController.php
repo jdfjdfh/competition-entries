@@ -258,68 +258,51 @@ class SubmissionController extends Controller
     }
 
     /**
-     * Change submission status (for jury)
+     * Изменение статуса работы (для жюри)
      */
     public function changeStatus(Request $request, Submission $submission)
     {
         $user = Auth::user();
 
+        // Только жюри и админ могут менять статус
         if (!$user->isJury() && !$user->isAdmin()) {
-            if ($request->wantsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'error' => 'У вас нет прав для изменения статуса'
-                ], 403);
-            }
-            abort(403);
+            return redirect()->back()->with('error', 'У вас нет прав для изменения статуса');
         }
 
+        // Валидация
         $request->validate([
             'status' => 'required|in:submitted,needs_fix,accepted,rejected',
-            'comment' => 'nullable|string|max:5000',
+            'comment' => 'required_if:status,needs_fix|nullable|string|max:1000',
         ]);
 
         // Проверяем, допустим ли такой переход
-        $allowedTransitions = $this->getAllowedStatusTransitions();
-        $allowed = $allowedTransitions[$submission->status] ?? [];
-
-        if (!in_array($request->status, $allowed)) {
-            return back()->with('error', 'Недопустимый переход статуса')
-                ->withInput();
+        if (!$submission->canJurySetStatus($request->status)) {
+            return redirect()->back()->with('error', 'Недопустимый переход статуса');
         }
 
         try {
-            $this->submissionService->changeStatus($submission, $request->status);
+            // Меняем статус
+            $this->submissionService->changeStatus($submission, $request->status, $user);
 
-            // Добавляем комментарий, если он есть
+            // Если есть комментарий, добавляем его
             if ($request->filled('comment')) {
-                $this->submissionService->addComment(
-                    $submission,
-                    $user,
-                    $request->comment
-                );
+                $this->submissionService->addComment($submission, $user, $request->comment);
             }
 
-            if ($request->wantsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Статус работы изменен',
-                    'new_status' => $request->status
-                ]);
-            }
+            // Разные сообщения для разных статусов
+            $messages = [
+                'accepted' => 'Работа принята. Поздравляем участника!',
+                'rejected' => 'Работа отклонена',
+                'needs_fix' => 'Запрошена доработка. Комментарий отправлен участнику.',
+            ];
+
+            $successMessage = $messages[$request->status] ?? 'Статус работы изменен';
 
             return redirect()->route('submissions.show', $submission)
-                ->with('success', 'Статус работы изменен');
+                ->with('success', $successMessage);
 
         } catch (\Exception $e) {
-            if ($request->wantsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'error' => $e->getMessage()
-                ], 400);
-            }
-
-            return back()->with('error', 'Ошибка: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Ошибка: ' . $e->getMessage());
         }
     }
 
