@@ -52,12 +52,18 @@
 
             @if($submission->isEditable() && $submission->attachments->count() < 3)
                 <div class="mb-4">
-                    <form action="{{ route('attachments.upload', $submission) }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+                    <form action="{{ route('attachments.upload', $submission) }}" method="POST" enctype="multipart/form-data">
                         @csrf
                         <div class="flex items-center space-x-4">
-                            <input type="file" name="file" id="file" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">
-                                Загрузить
+                            <input type="file"
+                                   name="file"
+                                   id="file"
+                                   accept=".pdf,.zip,.png,.jpg,.jpeg,application/pdf,application/zip,image/png,image/jpeg"
+                                   onchange="checkFileType(this)"
+                                   required
+                                   class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+                            <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded whitespace-nowrap">
+                                Загрузить файл
                             </button>
                         </div>
                         <p class="text-xs text-gray-500 mt-2">Максимум 3 файла, до 10MB каждый. Разрешены: PDF, ZIP, PNG, JPG</p>
@@ -80,12 +86,12 @@
                                     @if($attachment->status === 'scanned') text-green-600
                                     @elseif($attachment->status === 'rejected') text-red-600
                                     @else text-yellow-600 @endif
-                                ">
-                                    @if($attachment->status === 'scanned') Проверен
+                                    ">
+                                        @if($attachment->status === 'scanned') Проверен
                                         @elseif($attachment->status === 'rejected') Отклонен
                                         @else В ожидании
                                         @endif
-                                </span>
+                                    </span>
                                     @if($attachment->rejection_reason)
                                         <span class="text-red-600"> ({{ $attachment->rejection_reason }})</span>
                                     @endif
@@ -98,10 +104,13 @@
                                 Скачать
                             </a>
                             @if($submission->isEditable() && $attachment->user_id === Auth::id())
-                                <button onclick="deleteAttachment({{ $attachment->id }})"
-                                        class="text-red-600 hover:text-red-900 text-sm">
-                                    Удалить
-                                </button>
+                                <form action="{{ route('attachments.destroy', [$submission, $attachment]) }}" method="POST" class="inline" onsubmit="return confirm('Вы уверены, что хотите удалить этот файл?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="text-red-600 hover:text-red-900 text-sm">
+                                        Удалить
+                                    </button>
+                                </form>
                             @endif
                         </div>
                     </div>
@@ -160,7 +169,7 @@
                         @csrf
                         @method('PATCH')
                         <input type="hidden" name="status" value="accepted">
-                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" onclick="return confirm('Принять эту работу?')">
                             Принять
                         </button>
                     </form>
@@ -168,7 +177,7 @@
                         @csrf
                         @method('PATCH')
                         <input type="hidden" name="status" value="rejected">
-                        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">
+                        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded" onclick="return confirm('Отклонить эту работу?')">
                             Отклонить
                         </button>
                     </form>
@@ -211,7 +220,7 @@
                     @if($submission->hasScannedAttachments())
                         <form action="{{ route('submissions.submit', $submission) }}" method="POST" class="inline">
                             @csrf
-                            <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                            <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded" onclick="return confirm('Отправить работу на конкурс?')">
                                 Отправить на конкурс
                             </button>
                         </form>
@@ -222,28 +231,6 @@
     </div>
 
     <script>
-        function deleteAttachment(attachmentId) {
-            if (confirm('Вы уверены, что хотите удалить этот файл?')) {
-                fetch(`/submissions/{{ $submission->id }}/attachments/${attachmentId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
-                })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            location.reload();
-                        } else {
-                            alert(data.message || 'Ошибка при удалении файла');
-                        }
-                    })
-                    .catch(error => {
-                        alert('Ошибка при удалении файла');
-                    });
-            }
-        }
-
         function showNeedsFixForm() {
             document.getElementById('needsFixForm').classList.remove('hidden');
         }
@@ -251,30 +238,5 @@
         function hideNeedsFixForm() {
             document.getElementById('needsFixForm').classList.add('hidden');
         }
-
-        document.getElementById('uploadForm')?.addEventListener('submit', function(e) {
-            e.preventDefault();
-
-            const formData = new FormData(this);
-
-            fetch(this.action, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                }
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        location.reload();
-                    } else {
-                        alert(data.message || 'Ошибка при загрузке файла');
-                    }
-                })
-                .catch(error => {
-                    alert('Ошибка при загрузке файла');
-                });
-        });
     </script>
 @endsection
