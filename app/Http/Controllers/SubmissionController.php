@@ -284,9 +284,13 @@ class SubmissionController extends Controller
             // Меняем статус
             $this->submissionService->changeStatus($submission, $request->status, $user);
 
-            // Если есть комментарий, добавляем его
+            // Если есть комментарий, добавляем его (исправленный порядок параметров)
             if ($request->filled('comment')) {
-                $this->submissionService->addComment($submission, $user, $request->comment);
+                $this->submissionService->addComment(
+                    $submission,
+                    $user,           // User object идет вторым
+                    $request->comment // string идет третьим
+                );
             }
 
             // Разные сообщения для разных статусов

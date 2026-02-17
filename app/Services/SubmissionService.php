@@ -65,14 +65,17 @@ class SubmissionService
         });
     }
 
-    public function changeStatus(Submission $submission, string $newStatus, ?User $jury = null): Submission
+    /**
+     * Изменение статуса (для жюри)
+     */
+    public function changeStatus(Submission $submission, string $newStatus, ?User $user = null): Submission
     {
         // Проверяем, допустим ли такой переход
         if (!$submission->canJurySetStatus($newStatus)) {
             throw new \Exception('Недопустимый переход статуса');
         }
 
-        return DB::transaction(function () use ($submission, $newStatus, $jury) {
+        return DB::transaction(function () use ($submission, $newStatus, $user) {
             $oldStatus = $submission->status;
 
             $submission->update(['status' => $newStatus]);
@@ -84,7 +87,7 @@ class SubmissionService
         });
     }
 
-    public function addComment(Submission $submission, string $body, User $user)
+    public function addComment(Submission $submission, User $user, string $body): SubmissionComment
     {
         return SubmissionComment::create([
             'submission_id' => $submission->id,

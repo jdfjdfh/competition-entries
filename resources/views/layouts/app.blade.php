@@ -31,7 +31,7 @@
                             📋 Конкурсы
                         </a>
 
-                        @if(Auth::user()->isParticipant() || Auth::user()->isAdmin())
+                        @if(Auth::user()->isParticipant())
                             <a href="{{ route('submissions.index') }}"
                                class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 {{ request()->routeIs('submissions.index') ? 'border-b-2 border-indigo-500' : '' }}">
                                 📁 Мои работы
@@ -40,7 +40,7 @@
 
                         @if(Auth::user()->isJury() || Auth::user()->isAdmin())
                             <a href="{{ route('submissions.index') }}?status=submitted"
-                               class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+                               class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 {{ request()->routeIs('submissions.index') ? 'border-b-2 border-indigo-500' : '' }}">
                                 ⏳ На проверке
                             </a>
                         @endif
@@ -85,35 +85,144 @@
                         </button>
 
                         <!-- Выпадающее меню уведомлений -->
-                        <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg overflow-hidden z-20" style="display: none;">
+                        <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-96 bg-white rounded-md shadow-lg overflow-hidden z-20" style="display: none;">
                             <div class="py-2">
-                                <div class="px-4 py-2 bg-gray-50 border-b">
+                                <div class="px-4 py-2 bg-gray-50 border-b flex justify-between items-center">
                                     <h3 class="text-sm font-medium text-gray-700">Уведомления</h3>
+                                    @if($unreadCount > 0)
+                                        <form action="{{ route('notifications.read-all') }}" method="POST" class="inline">
+                                            @csrf
+                                            <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-900">
+                                                Отметить все
+                                            </button>
+                                        </form>
+                                    @endif
                                 </div>
+
                                 <div class="max-h-96 overflow-y-auto">
                                     @php
-                                        $latestNotifications = App\Models\Notification::where('user_id', Auth::id())->latest()->limit(5)->get();
+                                        $latestNotifications = App\Models\Notification::where('user_id', Auth::id())
+                                            ->latest()
+                                            ->limit(5)
+                                            ->get();
                                     @endphp
+
                                     @forelse($latestNotifications as $notification)
-                                        <div class="px-4 py-3 hover:bg-gray-50 {{ is_null($notification->read_at) ? 'bg-blue-50' : '' }}">
-                                            <p class="text-sm text-gray-600">
-                                                @if($notification->type === 'status_changed')
-                                                    @php $data = $notification->data; @endphp
-                                                    Статус работы "{{ Str::limit($data['submission_title'] ?? 'Без названия', 30) }}" изменен
-                                                @else
-                                                    {{ $notification->type }}
+                                        <a href="{{ $notification->link }}"
+                                           class="block px-4 py-3 hover:bg-gray-50 {{ is_null($notification->read_at) ? 'bg-blue-50' : '' }} border-b last:border-0"
+                                           @click="open = false">
+
+                                            <div class="flex items-start space-x-3">
+                                                <!-- Иконка в зависимости от типа -->
+                                                <div class="flex-shrink-0 text-xl">
+                                                    @switch($notification->type)
+                                                        @case('status_changed')
+                                                            🔄
+                                                            @break
+                                                        @case('new_comment')
+                                                            💬
+                                                            @break
+                                                        @case('new_submission')
+                                                            📝
+                                                            @break
+                                                        @case('deadline_reminder')
+                                                            ⏰
+                                                            @break
+                                                        @default
+                                                            📢
+                                                    @endswitch
+                                                </div>
+
+                                                <div class="flex-1 min-w-0">
+                                                    <!-- Заголовок уведомления -->
+                                                    <p class="text-sm font-medium text-gray-900">
+                                                        @switch($notification->type)
+                                                            @case('status_changed')
+                                                                Изменение статуса
+                                                                @break
+                                                            @case('new_comment')
+                                                                Новый комментарий
+                                                                @break
+                                                            @case('new_submission')
+                                                                Новая работа
+                                                                @break
+                                                            @case('deadline_reminder')
+                                                                Напоминание
+                                                                @break
+                                                            @default
+                                                                Уведомление
+                                                        @endswitch
+                                                    </p>
+
+                                                    <!-- Текст уведомления (человекочитаемый) -->
+                                                    <p class="text-sm text-gray-600 mt-1 line-clamp-2">
+                                                        @if($notification->type === 'status_changed')
+                                                            @php
+                                                                $data = $notification->data;
+                                                                $statusNames = [
+                                                                    'draft' => 'Черновик',
+                                                                    'submitted' => 'На проверке',
+                                                                    'needs_fix' => 'Требует доработки',
+                                                                    'accepted' => 'Принята',
+                                                                    'rejected' => 'Отклонена',
+                                                                ];
+                                                                $newStatus = $data['new_status'] ?? '';
+                                                                $statusText = $statusNames[$newStatus] ?? $newStatus;
+                                                            @endphp
+                                                            Работа "{{ Str::limit($data['submission_title'] ?? 'Без названия', 30) }}"
+                                                            → {{ $statusText }}
+
+                                                        @elseif($notification->type === 'new_comment')
+                                                            @php $data = $notification->data; @endphp
+                                                            {{ $data['comment_author'] ?? 'Пользователь' }} оставил комментарий
+
+                                                        @elseif($notification->type === 'new_submission')
+                                                            @php $data = $notification->data; @endphp
+                                                            Новая работа от {{ $data['author_name'] ?? 'участника' }}
+
+                                                        @elseif($notification->type === 'deadline_reminder')
+                                                            @php
+                                                                $data = $notification->data;
+                                                                $days = $data['days_left'] ?? 0;
+                                                                $dayText = match(true) {
+                                                                    $days % 10 == 1 && $days % 100 != 11 => 'день',
+                                                                    $days % 10 >= 2 && $days % 10 <= 4 && ($days % 100 < 10 || $days % 100 >= 20) => 'дня',
+                                                                    default => 'дней',
+                                                                };
+                                                            @endphp
+                                                            Дедлайн через {{ $days }} {{ $dayText }}
+
+                                                        @else
+                                                            {{ $notification->type }}
+                                                        @endif
+                                                    </p>
+
+                                                    <!-- Дата -->
+                                                    <p class="text-xs text-gray-400 mt-1">
+                                                        {{ $notification->created_at->diffForHumans() }}
+                                                    </p>
+                                                </div>
+
+                                                <!-- Индикатор непрочитанного -->
+                                                @if(is_null($notification->read_at))
+                                                    <div class="flex-shrink-0">
+                                                        <span class="h-2 w-2 bg-blue-600 rounded-full"></span>
+                                                    </div>
                                                 @endif
-                                            </p>
-                                            <p class="text-xs text-gray-400 mt-1">{{ $notification->created_at->diffForHumans() }}</p>
-                                        </div>
+                                            </div>
+                                        </a>
                                     @empty
                                         <div class="px-4 py-8 text-center text-sm text-gray-500">
+                                            <svg class="mx-auto h-8 w-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
+                                            </svg>
                                             Нет уведомлений
                                         </div>
                                     @endforelse
                                 </div>
+
                                 <div class="px-4 py-2 bg-gray-50 border-t text-center">
-                                    <a href="{{ route('notifications.index') }}" class="text-xs text-indigo-600 hover:text-indigo-900">
+                                    <a href="{{ route('notifications.index') }}" class="text-xs text-indigo-600 hover:text-indigo-900 font-medium">
                                         Все уведомления
                                     </a>
                                 </div>

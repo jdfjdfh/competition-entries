@@ -13,6 +13,7 @@
                     Все ваши уведомления
                 </p>
             </div>
+
             @if($notifications->count() > 0)
                 <div class="flex space-x-2">
                     <form action="{{ route('notifications.read-all') }}" method="POST" class="inline">
@@ -21,6 +22,7 @@
                             Отметить все как прочитанные
                         </button>
                     </form>
+
                     <form action="{{ route('notifications.clear-all') }}" method="POST" class="inline">
                         @csrf
                         @method('DELETE')
@@ -34,57 +36,94 @@
 
         <div class="border-t border-gray-200">
             @forelse($notifications as $notification)
-                <div class="px-4 py-4 sm:px-6 {{ is_null($notification->read_at) ? 'bg-blue-50' : 'bg-white' }} border-b border-gray-200 last:border-0">
-                    <div class="flex items-center justify-between">
-                        <div class="flex-1">
-                            <div class="flex items-center">
-                                @if(is_null($notification->read_at))
-                                    <span class="h-2 w-2 bg-blue-600 rounded-full mr-2"></span>
-                                @endif
-                                <p class="text-sm font-medium text-gray-900">
-                                    {{ $notification->type === 'status_changed' ? 'Изменение статуса работы' : 'Уведомление' }}
-                                </p>
-                            </div>
-                            <div class="mt-2">
-                                @if($notification->type === 'status_changed')
-                                    @php
-                                        $data = $notification->data;
-                                    @endphp
-                                    <p class="text-sm text-gray-600">
-                                        Статус работы "{{ $data['submission_title'] ?? 'Без названия' }}"
-                                        изменен с "{{ $data['old_status'] ?? 'неизвестно' }}" на
-                                        <span class="font-medium
-                                    @if(($data['new_status'] ?? '') === 'accepted') text-green-600
-                                    @elseif(($data['new_status'] ?? '') === 'rejected') text-red-600
-                                    @elseif(($data['new_status'] ?? '') === 'needs_fix') text-yellow-600
-                                    @else text-blue-600 @endif">
-                                    {{ $data['new_status'] ?? 'неизвестно' }}
-                                </span>
-                                    </p>
-                                @else
-                                    <p class="text-sm text-gray-600">{{ json_encode($notification->data) }}</p>
-                                @endif
-                            </div>
-                            <p class="mt-1 text-xs text-gray-400">
-                                {{ $notification->created_at->diffForHumans() }}
-                            </p>
+                <div class="px-4 py-4 sm:px-6 border-b border-gray-200 hover:bg-gray-50 transition-colors {{ is_null($notification->read_at) ? $notification->bg_color : '' }}">
+                    <div class="flex items-start space-x-3">
+                        <!-- Иконка -->
+                        <div class="flex-shrink-0 text-2xl">
+                            {{ $notification->icon }}
                         </div>
-                        <div class="ml-4 flex items-center space-x-2">
-                            @if(is_null($notification->read_at))
-                                <form action="{{ route('notifications.read', $notification) }}" method="POST">
-                                    @csrf
-                                    <button type="submit" class="text-sm text-indigo-600 hover:text-indigo-900">
-                                        Отметить
-                                    </button>
-                                </form>
-                            @endif
-                            <form action="{{ route('notifications.destroy', $notification) }}" method="POST">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="text-sm text-red-600 hover:text-red-900">
-                                    Удалить
-                                </button>
-                            </form>
+
+                        <!-- Контент -->
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between">
+                                <p class="text-sm font-medium text-gray-900">
+                                    @switch($notification->type)
+                                        @case('status_changed')
+                                            Изменение статуса
+                                            @break
+                                        @case('new_comment')
+                                            Новый комментарий
+                                            @break
+                                        @case('new_submission')
+                                            Новая работа
+                                            @break
+                                        @case('deadline_reminder')
+                                            Напоминание
+                                            @break
+                                        @default
+                                            Уведомление
+                                    @endswitch
+                                </p>
+
+                                <div class="flex items-center space-x-2">
+                                    @if(is_null($notification->read_at))
+                                        <form action="{{ route('notifications.read', $notification) }}" method="POST">
+                                            @csrf
+                                            <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-900">
+                                                Отметить
+                                            </button>
+                                        </form>
+                                    @endif
+
+                                    <form action="{{ route('notifications.destroy', $notification) }}" method="POST">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="text-xs text-red-600 hover:text-red-900">
+                                            Удалить
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <!-- Текст уведомления со ссылкой -->
+                            <a href="{{ $notification->link }}" class="block mt-1 group">
+                                <p class="text-sm text-gray-600 group-hover:text-indigo-600 transition-colors">
+                                    {{ $notification->message }}
+                                </p>
+
+                                <!-- Для уведомлений об изменении статуса показываем старый и новый статус -->
+                                @if($notification->type === 'status_changed' && isset($notification->data['old_status']))
+                                    <div class="mt-2 flex items-center space-x-2">
+                                <span class="px-2 py-0.5 text-xs rounded-full {{ $notification->old_status_color }}">
+                                    {{ $notification->old_status_name }}
+                                </span>
+                                        <span class="text-gray-400">→</span>
+                                        <span class="px-2 py-0.5 text-xs rounded-full {{ $notification->new_status_color }}">
+                                    {{ $notification->new_status_name }}
+                                </span>
+                                    </div>
+                                @endif
+
+                                <!-- Для новых комментариев показываем превью -->
+                                @if($notification->type === 'new_comment' && isset($notification->data['comment_preview']))
+                                    <p class="mt-2 text-xs text-gray-500 italic">
+                                        "{{ Str::limit($notification->data['comment_preview'], 50) }}"
+                                    </p>
+                                @endif
+
+                                <!-- Для напоминаний о дедлайне показываем дату -->
+                                @if($notification->type === 'deadline_reminder' && isset($notification->data['deadline']))
+                                    <p class="mt-2 text-xs text-gray-500">
+                                        Дедлайн: {{ $notification->data['deadline'] }}
+                                    </p>
+                                @endif
+                            </a>
+
+                            <!-- Дата -->
+                            <p class="mt-2 text-xs text-gray-400">
+                                {{ $notification->created_at->format('d.m.Y H:i') }}
+                                <span class="ml-1">({{ $notification->created_at->diffForHumans() }})</span>
+                            </p>
                         </div>
                     </div>
                 </div>
