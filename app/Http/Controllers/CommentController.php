@@ -26,8 +26,8 @@ class CommentController extends Controller
 
         $comment = $this->submissionService->addComment(
             $submission,
-            $request->body,
-            $user
+            $user,
+            $request->body
         );
 
         if ($request->wantsJson()) {

@@ -7,6 +7,10 @@ use App\Models\Contest;
 use App\Models\User;
 use App\Services\SubmissionService;
 use App\Services\AttachmentService;
+use App\Http\Requests\StoreSubmissionRequest;
+use App\Http\Requests\UpdateSubmissionRequest;
+use App\Http\Requests\ChangeSubmissionStatusRequest;
+use App\Http\Requests\StoreCommentRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -112,16 +116,10 @@ class SubmissionController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(StoreSubmissionRequest $request)
     {
-        $request->validate([
-            'contest_id' => 'required|exists:contests,id',
-            'title' => 'required|string|max:255',
-            'description' => 'required|string',
-        ]);
-
         try {
-            $submission = $this->submissionService->create($request->all(), Auth::user());
+            $submission = $this->submissionService->create($request->validated(), Auth::user());
 
             return redirect()->route('submissions.show', $submission)
                 ->with('success', 'Черновик работы успешно создан');
@@ -213,21 +211,10 @@ class SubmissionController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Submission $submission)
+    public function update(UpdateSubmissionRequest $request, Submission $submission)
     {
-        $user = Auth::user();
-
-        if ($submission->user_id !== $user->id) {
-            abort(403);
-        }
-
-        $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'required|string',
-        ]);
-
         try {
-            $this->submissionService->update($submission, $request->all());
+            $this->submissionService->update($submission, $request->validated());
 
             return redirect()->route('submissions.show', $submission)
                 ->with('success', 'Работа успешно обновлена');
@@ -260,36 +247,20 @@ class SubmissionController extends Controller
     /**
      * Изменение статуса работы (для жюри)
      */
-    public function changeStatus(Request $request, Submission $submission)
+    public function changeStatus(ChangeSubmissionStatusRequest $request, Submission $submission)
     {
         $user = Auth::user();
-
-        // Только жюри и админ могут менять статус
-        if (!$user->isJury() && !$user->isAdmin()) {
-            return redirect()->back()->with('error', 'У вас нет прав для изменения статуса');
-        }
-
-        // Валидация
-        $request->validate([
-            'status' => 'required|in:submitted,needs_fix,accepted,rejected',
-            'comment' => 'required_if:status,needs_fix|nullable|string|max:1000',
-        ]);
-
-        // Проверяем, допустим ли такой переход
-        if (!$submission->canJurySetStatus($request->status)) {
-            return redirect()->back()->with('error', 'Недопустимый переход статуса');
-        }
 
         try {
             // Меняем статус
             $this->submissionService->changeStatus($submission, $request->status, $user);
 
-            // Если есть комментарий, добавляем его (исправленный порядок параметров)
+            // Если есть комментарий, добавляем его
             if ($request->filled('comment')) {
                 $this->submissionService->addComment(
                     $submission,
-                    $user,           // User object идет вторым
-                    $request->comment // string идет третьим
+                    $user,
+                    $request->comment
                 );
             }
 

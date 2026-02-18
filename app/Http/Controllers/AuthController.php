@@ -4,12 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use App\Http\Requests\Auth\LoginRequest;
+use App\Http\Requests\Auth\RegisterRequest;
+use App\Http\Requests\Auth\ForgotPasswordRequest;
+use App\Http\Requests\Auth\ResetPasswordRequest;
+use App\Http\Requests\Profile\UpdateProfileRequest;
+use App\Http\Requests\Profile\DeleteAccountRequest;
+use App\Http\Requests\Auth\QuickSwitchRoleRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Auth\Events\PasswordReset;
-use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
@@ -24,13 +30,9 @@ class AuthController extends Controller
     /**
      * Обработка входа в систему
      */
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        $credentials = $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required'],
-        ]);
-
+        $credentials = $request->only('email', 'password');
         $remember = $request->boolean('remember');
 
         if (Auth::attempt($credentials, $remember)) {
@@ -53,9 +55,9 @@ class AuthController extends Controller
                 ->with('success', 'Вы успешно вошли в систему!');
         }
 
-        throw ValidationException::withMessages([
-            'email' => __('Предоставленные учетные данные не совпадают с нашими записями.'),
-        ]);
+        return back()->withErrors([
+            'email' => 'Предоставленные учетные данные не совпадают с нашими записями.',
+        ])->onlyInput('email');
     }
 
     /**
@@ -69,18 +71,12 @@ class AuthController extends Controller
     /**
      * Обработка регистрации нового пользователя
      */
-    public function register(Request $request)
+    public function register(RegisterRequest $request)
     {
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-        ]);
-
         $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
             'role' => 'participant', // По умолчанию все новые пользователи - участники
         ]);
 
@@ -105,92 +101,6 @@ class AuthController extends Controller
     }
 
     /**
-     * Показать форму для сброса пароля
-     */
-    public function showForgotForm()
-    {
-        return view('auth.forgot-password');
-    }
-
-    /**
-     * Отправка ссылки для сброса пароля
-     */
-    public function sendResetLink(Request $request)
-    {
-        $request->validate(['email' => 'required|email']);
-
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
-
-        return $status === Password::RESET_LINK_SENT
-            ? back()->with(['success' => __($status)])
-            : back()->withErrors(['email' => __($status)]);
-    }
-
-    /**
-     * Показать форму сброса пароля
-     */
-    public function showResetForm(string $token)
-    {
-        return view('auth.reset-password', ['token' => $token]);
-    }
-
-    /**
-     * Сброс пароля
-     */
-    public function resetPassword(Request $request)
-    {
-        $request->validate([
-            'token' => 'required',
-            'email' => 'required|email',
-            'password' => 'required|min:8|confirmed',
-        ]);
-
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (User $user, string $password) {
-                $user->forceFill([
-                    'password' => Hash::make($password)
-                ])->setRememberToken(Str::random(60));
-
-                $user->save();
-
-                event(new PasswordReset($user));
-            }
-        );
-
-        return $status === Password::PASSWORD_RESET
-            ? redirect()->route('login')->with('success', __($status))
-            : back()->withErrors(['email' => [__($status)]]);
-    }
-
-    /**
-     * Подтверждение email (если используется)
-     */
-    public function verifyEmail(Request $request)
-    {
-        $request->user()->markEmailAsVerified();
-
-        return redirect()->intended('dashboard')
-            ->with('success', 'Email успешно подтвержден!');
-    }
-
-    /**
-     * Отправка повторного письма для подтверждения email
-     */
-    public function resendVerificationEmail(Request $request)
-    {
-        if ($request->user()->hasVerifiedEmail()) {
-            return redirect()->route('dashboard');
-        }
-
-        $request->user()->sendEmailVerificationNotification();
-
-        return back()->with('success', 'Ссылка для подтверждения отправлена!');
-    }
-
-    /**
      * Проверка текущего статуса аутентификации (для AJAX)
      */
     public function checkAuth(Request $request)
@@ -209,16 +119,12 @@ class AuthController extends Controller
     /**
      * Быстрая смена роли (только для разработки/тестирования)
      */
-    public function quickSwitchRole(Request $request)
+    public function quickSwitchRole(QuickSwitchRoleRequest $request)
     {
         // Этот метод должен быть доступен только в локальной среде
         if (!app()->environment('local')) {
             abort(403);
         }
-
-        $request->validate([
-            'role' => 'required|in:participant,jury,admin'
-        ]);
 
         $user = Auth::user();
         $user->role = $request->role;
@@ -231,22 +137,15 @@ class AuthController extends Controller
     /**
      * Обновление профиля пользователя
      */
-    public function updateProfile(Request $request)
+    public function updateProfile(UpdateProfileRequest $request)
     {
         $user = Auth::user();
 
-        $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,' . $user->id],
-            'current_password' => ['nullable', 'required_with:new_password', 'current_password'],
-            'new_password' => ['nullable', 'min:8', 'confirmed'],
-        ]);
+        $user->name = $request->name;
+        $user->email = $request->email;
 
-        $user->name = $validated['name'];
-        $user->email = $validated['email'];
-
-        if (!empty($validated['new_password'])) {
-            $user->password = Hash::make($validated['new_password']);
+        if ($request->filled('new_password')) {
+            $user->password = Hash::make($request->new_password);
         }
 
         $user->save();
@@ -258,12 +157,8 @@ class AuthController extends Controller
     /**
      * Удаление аккаунта пользователя
      */
-    public function deleteAccount(Request $request)
+    public function deleteAccount(DeleteAccountRequest $request)
     {
-        $request->validate([
-            'password' => ['required', 'current_password'],
-        ]);
-
         $user = Auth::user();
 
         // Выходим из системы

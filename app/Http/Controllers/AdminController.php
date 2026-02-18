@@ -7,7 +7,11 @@ use App\Models\Contest;
 use App\Models\Submission;
 use App\Models\Attachment;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use App\Http\Requests\Admin\StoreUserRequest;
+use App\Http\Requests\Admin\UpdateUserRequest;
+use App\Http\Requests\Admin\StoreContestRequest;
+use App\Http\Requests\Admin\UpdateContestRequest;
+use App\Http\Requests\Admin\UpdateSettingsRequest;
 use Illuminate\Support\Facades\Hash;
 
 class AdminController extends Controller
@@ -49,7 +53,7 @@ class AdminController extends Controller
         $query = User::query();
 
         // Поиск
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->filled('search')) {
             $query->where(function($q) use ($request) {
                 $q->where('name', 'like', '%' . $request->search . '%')
                     ->orWhere('email', 'like', '%' . $request->search . '%');
@@ -57,7 +61,7 @@ class AdminController extends Controller
         }
 
         // Фильтр по роли
-        if ($request->has('role') && !empty($request->role)) {
+        if ($request->filled('role')) {
             $query->where('role', $request->role);
         }
 
@@ -77,15 +81,8 @@ class AdminController extends Controller
     /**
      * Сохранение нового пользователя
      */
-    public function storeUser(Request $request)
+    public function storeUser(StoreUserRequest $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
-            'role' => ['required', Rule::in(['participant', 'jury', 'admin'])],
-        ]);
-
         User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -109,14 +106,8 @@ class AdminController extends Controller
     /**
      * Обновление пользователя
      */
-    public function updateUser(Request $request, User $user)
+    public function updateUser(UpdateUserRequest $request, User $user)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'role' => ['required', Rule::in(['participant', 'jury', 'admin'])],
-        ]);
-
         // Не позволяем админу изменить свою собственную роль
         if ($user->id === auth()->id() && $request->role !== 'admin') {
             return back()->with('error', 'Вы не можете изменить свою собственную роль');
@@ -127,7 +118,6 @@ class AdminController extends Controller
         $user->role = $request->role;
 
         if ($request->filled('password')) {
-            $request->validate(['password' => 'min:8']);
             $user->password = Hash::make($request->password);
         }
 
@@ -234,15 +224,8 @@ class AdminController extends Controller
     /**
      * Сохранение конкурса
      */
-    public function storeContest(Request $request)
+    public function storeContest(StoreContestRequest $request)
     {
-        $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'deadline_at' => 'required|date|after:now',
-            'is_active' => 'boolean',
-        ]);
-
         Contest::create($request->all());
 
         return redirect()->route('admin.contests')
@@ -260,15 +243,8 @@ class AdminController extends Controller
     /**
      * Обновление конкурса
      */
-    public function updateContest(Request $request, Contest $contest)
+    public function updateContest(UpdateContestRequest $request, Contest $contest)
     {
-        $request->validate([
-            'title' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'deadline_at' => 'required|date',
-            'is_active' => 'boolean',
-        ]);
-
         $contest->update($request->all());
 
         return redirect()->route('admin.contests')
@@ -299,15 +275,15 @@ class AdminController extends Controller
         $query = Submission::with(['user', 'contest', 'attachments']);
 
         // Фильтры
-        if ($request->has('status') && !empty($request->status)) {
+        if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        if ($request->has('contest_id') && !empty($request->contest_id)) {
+        if ($request->filled('contest_id')) {
             $query->where('contest_id', $request->contest_id);
         }
 
-        if ($request->has('user_id') && !empty($request->user_id)) {
+        if ($request->filled('user_id')) {
             $query->where('user_id', $request->user_id);
         }
 
@@ -330,7 +306,7 @@ class AdminController extends Controller
     /**
      * Сохранение настроек
      */
-    public function updateSettings(Request $request)
+    public function updateSettings(UpdateSettingsRequest $request)
     {
         // Здесь можно сохранять настройки в отдельную таблицу или .env
         // Для простоты просто показываем сообщение
